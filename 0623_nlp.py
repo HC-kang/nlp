@@ -217,7 +217,13 @@ words = sum(sentences, [])
 print(words)
 
 
-text
+text = "A barber is a person. a barber is good person. a barber is huge person. \
+        he Knew A Secret! The Secret He Kept is huge secret. Huge secret. His barber kept his word. a barber kept his word. \
+        His barber kept his secret. But keeping and keeping such a huge secret to himself was driving the barber crazy. \
+        the barber went up a huge mountain."
+
+text = sent_tokenize(text)
+
 sentesces = []
 for i in text:
     sentence = word_tokenize(i)
@@ -273,3 +279,24 @@ print(word2idx)
 
 
 word2idx
+
+
+word2idx['oov'] = len(word2idx)+1
+
+word2idx
+
+sentences
+
+encoded = []
+
+for s in sentences:
+    temp = []
+    for w in s:
+        try:
+            temp.append(word2idx[w])
+        except KeyError:
+            temp.append(word2idx['oov'])
+    encoded.append(temp)
+
+encoded
+
