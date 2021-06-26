@@ -102,4 +102,3 @@ print(encoded)
 
 one_hot = to_categorical(encoded)
 print(one_hot)
-.tag
