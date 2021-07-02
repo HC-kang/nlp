@@ -77,3 +77,33 @@ test_x = [term_frequency(d) for d, _ in test_docs]
 
 train_y = [c for _, c in train_docs]
 test_y = [c for _, c in test_docs]
+
+import numpy as np
+x_train = np.asarray(train_x).astype('float32')
+x_test = np.asarray(test_x).astype('float32')
+
+y_train = np.asarray(train_y).astype('float32')
+y_test = np.asarray(test_y).astype('float32')
+
+print(x_train.shape)
+print(x_test.shape)
+print(y_train.shape)
+print(y_test.shape)
+
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras import optimizers
+from tensorflow.keras import losses
+from tensorflow.keras import metrics
+
+model = Sequential()
+model.add(Dense(64, activation = 'relu', input_shape = (100, )))
+model.add(Dense(64, activation = 'relu'))
+model.add(Dense(1, activation = 'sigmoid'))
+
+model.compile(optimizer = optimizers.RMSprop(lr = 0.001),
+              loss = losses.binary_crossentropy(),
+              metrics = 'accuracy')
+
+model.fit(x_train, y_train, epochs = 10, batch_size = 512)
+model.evaluate(x_test, y_test)

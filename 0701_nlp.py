@@ -433,7 +433,7 @@ model.compile(optimizer = 'adam',
 
 pred = model.fit(x_train, y_train, epochs = 5)
 
-model.evaluate(y_test, pred)
+model.evaluate(x_test, y_test)
 
 
 # MLP로 20개 뉴스 그룹 분류하기
