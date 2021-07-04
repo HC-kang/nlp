@@ -65,4 +65,4 @@ from konlpy.tag import Mecab
 mecab = Mecab()
 
 print(mecab.morphs('자연어처리가너무재밌어서밥먹는것도가끔까먹어요'))
-print(mecab.morphs('집에가고싶다'))
+print(mecab.morphs('나는집에간다'))
