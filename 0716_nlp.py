@@ -241,4 +241,158 @@ for i in range(num_display):
     prediction = idx2word[ytest_[i]]
     print("{:20}|{:7}|{}".format(question, label, prediction))
 
+import tensorflow as tf
+
+class PositionalEncoding(tf.keras.layers.Layer):
+    def __init__(self, position, d_model):
+        super(PositionalEncoding, self).__init__()
+        self.pos_encoding = self.positional_encoding(position, d_model)
+    def get_angles(self, position, i, d_model):
+        angles = 1/tf.pow(10000, (2*(i//2))/tf.cast(d_model, tf.float32))
+        return position * angles
     
+    def positional_encoding(self, position, d_model):
+        angle_rads = self.get_angles(
+            position= tf.range(position, dtype=tf.float32)[:, tf.newaxis],
+            i = tf.range(d_model, dtype=tf.float32)[tf.newaxis, :],
+            d_model = d_model
+        )
+
+        sines = tf.math.sin(angle_rads[:, 0::2])
+        cosines = tf.math.cos(angle_rads[:, 1::2])
+
+        angle_rads = np.zeros(angle_rads.shape)
+        angle_rads[:, 0::2] = sines
+        angle_rads[:, 1::2] = cosines
+        pos_encoding = tf.constant(angle_rads)
+        pos_encoding = pos_encoding[tf.newaxis, ...]   ### [1, :, :]
+
+        print(pos_encoding.shape)
+        return tf.cast(pos_encoding, tf.float32)
+
+    def call(self, inputs):
+        return inputs + self.pos_encoding[:, :tf.shape(inputs)[1], :]
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+sample_pos_encoding = PositionalEncoding(50, 128)
+
+plt.pcolormesh(sample_pos_encoding.pos_encoding.numpy()[0], cmap='RdBu')
+plt.xlabel('Depth')
+plt.xlim((0, 128))
+plt.ylabel('Position')
+plt.colorbar()
+plt.show()
+
+
+def scaled_dot_product_attention(query, key, value, mask):
+    # query 크기 : (batch_size, num_heads, query의 문장 길이, d_model/num_heads)
+    # key 크기 : (batch_size, num_heads, key의 문장 길이, d_model/num_heads)
+    # value 크기 : (batch_size, num_heads, value의 문잔 길이, d_model/num_heads)
+    # padding_mask : (batch_size, 1, 1, key의 문장길이)
+
+    matmul_qk = tf.matmul(query, key, transpose_b = True)
+
+    # 스케일링
+    depth = tf.cast(tf.shape(key)[-1], tf.float32)
+    logits = matmul_qk / tf.math.sqrt(depth)
+
+    # 마스킹
+    if mask is not None:
+        logits += (mask * -1e9)
+
+    # attention_weights : (batch_size, num_heads, query 문장길이, key의 문장 길이)
+    attention_weights = tf.nn.softmax(logits, axis = -1)
+
+    output = tf.matmul(attention_weights, value)
+
+    return output, attention_weights
+
+np.set_printoptions(suppress=True)
+temp_k = tf.constant([[10, 0, 0],
+                      [0, 10, 0],
+                      [0, 0, 10],
+                      [0, 0, 10]], dtype = tf.float32)
+temp_v = tf.constant([[1, 0],
+                      [10, 0],
+                      [100, 5],
+                      [1000, 6]], dtype = tf.float32)
+temp_q = tf.constant([[0, 10, 0]], dtype = tf.float32)
+
+temp_out, temp_attn = scaled_dot_product_attention(temp_q, temp_k, temp_v, None)
+
+print(temp_attn)
+print(temp_out)
+
+temp_q = tf.constant([[0, 0, 10]], dtype = tf.float32)
+temp_out, temp_attn = scaled_dot_product_attention(temp_q, temp_k, temp_v, None)
+print(temp_attn)
+print(temp_out)
+
+temp_q = tf.constant([[0, 0, 10], [0, 10, 0], [10, 10, 0]], dtype = tf.float32) # 3,3
+temp_out, temp_attn = scaled_dot_product_attention(temp_q, temp_k, temp_v, None)
+print(temp_attn)
+print(temp_out)
+
+class MultiHeadAttention(tf.keras.layers.Layer):
+    def __init__(self, d_model, num_heads, name = 'multi_head_attention'):
+        super(MultiHeadAttnetion, self).__init__(name = name)
+        self.num_heads = num_heads
+        self.d_model = d_model
+
+        assert d_model % self.num_heads == 0
+
+        # d_model을 num_head로 나눈 값 --> 64
+        self.depth = d_model // self.num_heads
+
+        self.query_dense = tf.keras.layers.Dense(units = d_model)
+        self.key_dense = tf.keras.layers.Dense(units = d_model)
+        self.value_dense = tf.keras.layers.Dense(units = d_model)
+
+        # w0 dense layer
+        self.dense = tf.kears.layers.Dense(units = d_model)
+
+    # num_heads 개수만큼 q, k, v split 하는 함수
+    def split_heads(self, inputs, batch_size):
+        inputs = tf.reshape(
+            inputs, shape = (batch_size, -1, self.num_heads, self.depth)
+        )
+        return tf.transpose(inputs, perm = [0, 2, 1, 3])
+
+    def call(self, inputs):
+        query, key, value, mask = inputs['query'], inputs['key'], inputs['value'], inputs['mask']
+        batch_size = tf.shape(query)[0]
+
+        # 1. WQ, Wk, Wv에 해당하는 d_model 크기의 Dense layer를 지나게 한다.
+        # q: (batch_size, query의 문장 길이, d_model)
+        # k: (batch_size, key의 문장 길이, d_model)
+        # v: (batch_size, value의 문장 길이, d_model)
+        query = self.query_dense(query)
+        key = self.key_dense(key)
+        value = self.value_dense(value)
+
+        # 2. 헤드 나누기
+        # q: (batch_size, query의 문장 길이, d_model/num_heads)
+        # k: (batch_size, key의 문장 길이, d_model/num_heads)
+        # v: (batch_size, value의 문장 길이, d_model/num_heads)
+        query = self.split_heads(query, batch_size)
+        key = self.split_heads(key, batch_size)
+        value = self.split_heads(value, batch_size)
+
+        # 3. 스케일드 닷 프로덕트 어텐션
+        # (batch_size, num_heads, query의 문장 길이, d_model/num_heads)
+        scaled_attention, _ = scaled_dot_product_attention(query, key, value, mask)
+        # (batch_size, query의 문장 길이, num_heads,  d_model/num_heads)
+        scaled_attention = tf.transpose(scaled_attention, perm = [0, 2, 1, 3])
+        
+        # 4. 헤드 연결하기
+        # (batch_size, query의 문장 길이, d_model)
+        concat_attention = tf.reshape(scaled_attention,
+                                      batch_size, -1, self.d_model)
+        
+        # 5. wo에 해당하는 dense layers 지니기
+        outputs = self.dense(concat_attention)
+
+        return outputs
+
